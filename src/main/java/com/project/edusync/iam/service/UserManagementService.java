@@ -63,4 +63,16 @@ public interface UserManagementService {
      * @return The updated User entity.
      */
     User updateStaff(java.util.UUID staffId, com.project.edusync.iam.model.dto.UpdateStaffRequestDTO request);
+
+    /**
+     * Soft deletes a Student by UUID by marking isActive=false.
+     * @param studentId Student UUID.
+     */
+    void softDeleteStudent(java.util.UUID studentId);
+
+    /**
+     * Soft deletes a Staff by UUID by marking isActive=false.
+     * @param staffId Staff UUID.
+     */
+    void softDeleteStaff(java.util.UUID staffId);
 }
