@@ -199,6 +199,7 @@ public class UserManagementController {
             @Parameter(description = "Student UUID", required = true, example = "39170ff6-80ff-4831-bd4d-dbfc07cc2d61")
             @PathVariable java.util.UUID studentId,
             @Valid @RequestBody UpdateStudentRequestDTO request) {
+        log.info("API Request: Update Student [{}]", studentId);
         userManagementService.updateStudent(studentId, request);
         return ResponseEntity.ok("Student updated successfully.");
     }
@@ -226,7 +227,54 @@ public class UserManagementController {
             @Parameter(description = "Staff UUID", required = true, example = "4e95ad14-20da-4939-b666-841f3259997d")
             @PathVariable java.util.UUID staffId,
             @Valid @RequestBody UpdateStaffRequestDTO request) {
+        log.info("API Request: Update Staff [{}]", staffId);
         userManagementService.updateStaff(staffId, request);
         return ResponseEntity.ok("Staff updated successfully.");
+    }
+
+    // =================================================================================
+    // 5. SOFT DELETE STUDENT / STAFF
+    // =================================================================================
+
+    @DeleteMapping("/student/{studentId}")
+    @PreAuthorize("hasAnyAuthority('ROLE_SUPER_ADMIN', 'ROLE_SCHOOL_ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "Soft Delete Student",
+            description = "Marks the student as inactive (isActive=false). Inactive students are excluded from listing APIs."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Student soft deleted successfully"),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires School Admin or Super Admin privileges"),
+            @ApiResponse(responseCode = "404", description = "Student not found or already inactive"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<String> softDeleteStudent(
+            @Parameter(description = "Student UUID", required = true, example = "39170ff6-80ff-4831-bd4d-dbfc07cc2d61")
+            @PathVariable java.util.UUID studentId) {
+        log.info("API Request: Soft Delete Student [{}]", studentId);
+        userManagementService.softDeleteStudent(studentId);
+        return ResponseEntity.ok("Student soft deleted successfully.");
+    }
+
+    @DeleteMapping("/staff/{staffId}")
+    @PreAuthorize("hasAnyAuthority('ROLE_SUPER_ADMIN', 'ROLE_SCHOOL_ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "Soft Delete Staff",
+            description = "Marks the staff member as inactive (isActive=false). Inactive staff are excluded from listing APIs."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Staff soft deleted successfully"),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires School Admin or Super Admin privileges"),
+            @ApiResponse(responseCode = "404", description = "Staff not found or already inactive"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<String> softDeleteStaff(
+            @Parameter(description = "Staff UUID", required = true, example = "4e95ad14-20da-4939-b666-841f3259997d")
+            @PathVariable java.util.UUID staffId) {
+        log.info("API Request: Soft Delete Staff [{}]", staffId);
+        userManagementService.softDeleteStaff(staffId);
+        return ResponseEntity.ok("Staff soft deleted successfully.");
     }
 }
