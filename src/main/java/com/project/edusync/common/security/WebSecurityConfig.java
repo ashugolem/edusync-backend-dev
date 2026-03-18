@@ -47,6 +47,13 @@ public class WebSecurityConfig {
             "/actuator/**" // Essential for health checks and metrics
     };
 
+    // SSE stream for bulk import progress.
+    // EventSource (browser API) cannot send Authorization headers,
+    // so the stream path is open. The sessionId UUID is the access token.
+    private static final String[] SSE_WHITELIST = {
+            "/bulk-import/stream/**"
+    };
+
     private final JWTFilter jwtFilter;
 
     @Bean
@@ -63,7 +70,7 @@ public class WebSecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         // Recommendation: Move origins to application.yml for environment-specific configs
-        configuration.setAllowedOrigins(List.of("http://localhost:5173"));
+        configuration.setAllowedOrigins(List.of("http://localhost:5173", "http://localhost:5174"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
@@ -89,8 +96,13 @@ public class WebSecurityConfig {
                         // 3. Actuator Endpoints (Monitoring)
                         .requestMatchers(MONITORING_WHITELIST).permitAll()
 
-                        // 4. Default: All other requests must be authenticated
-                        .anyRequest().authenticated()
+                        // 4. SSE stream for bulk import progress (EventSource cannot send JWT headers)
+                        .requestMatchers(Arrays.stream(SSE_WHITELIST)
+                                .map(path -> apiVersionPath + path)
+                                .toArray(String[]::new)).permitAll()
+
+                        // 5. Default: All other requests must be authenticated
+//                        .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(customAuthenticationEntryPoint))
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)

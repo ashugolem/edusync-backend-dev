@@ -161,6 +161,7 @@ public class RegisterUserByRole {
         student.setUserProfile(userProfile);
         student.setSection(section);
 
+        studentRepository.save(student);
         log.info("Successfully created student: {}", email);
     }
 

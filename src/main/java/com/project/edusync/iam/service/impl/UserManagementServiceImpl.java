@@ -34,6 +34,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.util.Collections;
@@ -110,8 +111,8 @@ public class UserManagementServiceImpl implements UserManagementService {
                 .orElseThrow(() -> new EdusyncException("System Error: Profile creation verification failed for user " + user.getUsername(), HttpStatus.INTERNAL_SERVER_ERROR));
 
         // 2. Fetch the Section
-        Section section = sectionRepository.findById(request.getSectionId())
-                .orElseThrow(() -> new ResourceNotFoundException("Section", "id", request.getSectionId()));
+        Section section = sectionRepository.findByUuid(request.getSectionId())
+                .orElseThrow(() -> new ResourceNotFoundException("Section", "uuid", request.getSectionId()));
         // 3. Create Core Student Entity
         Student student = studentMapper.toStudentEntity(request);
         student.setUserProfile(profile);
@@ -202,7 +203,7 @@ public class UserManagementServiceImpl implements UserManagementService {
      */
     private Staff createBaseStaff(BaseStaffRequestDTO request) {
         // A. Identity & Profile
-        User user = createUserWithRole(request, "STAFF");
+        User user = createUserWithRole(request, request.getStaffType().name());
 
         UserProfile profile = userProfileRepository.findByUser(user)
                 .orElseThrow(() -> new EdusyncException("System Error: Profile creation verification failed.", HttpStatus.INTERNAL_SERVER_ERROR));
@@ -210,6 +211,9 @@ public class UserManagementServiceImpl implements UserManagementService {
         // B. Base Staff Entity
         Staff staff = staffMapper.toEntity(request);
         staff.setUserProfile(profile);
+        if (!StringUtils.hasText(staff.getEmployeeId())) {
+            staff.setEmployeeId(request.getUsername());
+        }
 
         // Note: Staff ID is generated here
         return staffRepository.save(staff);
@@ -268,5 +272,148 @@ public class UserManagementServiceImpl implements UserManagementService {
 
     private String generateEnrollmentId() {
         return "STU-" + LocalDate.now().getYear() + "-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+    }
+
+    @Override
+    @Transactional
+    public User updateStudent(UUID studentId, UpdateStudentRequestDTO request) {
+        Student student = studentRepository.findByUuid(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student", "uuid", studentId));
+
+        UserProfile profile = student.getUserProfile();
+        User user = profile.getUser();
+
+        if (StringUtils.hasText(request.getEmail()) && !request.getEmail().equalsIgnoreCase(user.getEmail())) {
+            if (userRepository.existsByEmail(request.getEmail())) {
+                throw new UserAlreadyExistsException("Email '" + request.getEmail() + "' already exists.");
+            }
+            user.setEmail(request.getEmail());
+        }
+
+        if (StringUtils.hasText(request.getEnrollmentNumber())
+                && !request.getEnrollmentNumber().equals(student.getEnrollmentNumber())) {
+            if (studentRepository.existsByEnrollmentNumber(request.getEnrollmentNumber())) {
+                throw new UserAlreadyExistsException("Student with enrollment number " + request.getEnrollmentNumber() + " already exists.");
+            }
+            userRepository.findByUsername(request.getEnrollmentNumber()).ifPresent(existing -> {
+                if (!existing.getId().equals(user.getId())) {
+                    throw new UserAlreadyExistsException("Username '" + request.getEnrollmentNumber() + "' already exists.");
+                }
+            });
+            student.setEnrollmentNumber(request.getEnrollmentNumber());
+            user.setUsername(request.getEnrollmentNumber());
+        }
+
+        if (StringUtils.hasText(request.getFirstName())) {
+            profile.setFirstName(request.getFirstName());
+        }
+        if (request.getMiddleName() != null) {
+            profile.setMiddleName(request.getMiddleName());
+        }
+        if (StringUtils.hasText(request.getLastName())) {
+            profile.setLastName(request.getLastName());
+        }
+        if (request.getPreferredName() != null) {
+            profile.setPreferredName(request.getPreferredName());
+        }
+        if (request.getDateOfBirth() != null) {
+            profile.setDateOfBirth(request.getDateOfBirth());
+        }
+        if (request.getGender() != null) {
+            profile.setGender(request.getGender());
+        }
+        if (request.getBio() != null) {
+            profile.setBio(request.getBio());
+        }
+
+        if (request.getRollNo() != null) {
+            student.setRollNo(request.getRollNo());
+        }
+        if (request.getEnrollmentDate() != null) {
+            student.setEnrollmentDate(request.getEnrollmentDate());
+        }
+        if (request.getSectionId() != null) {
+            Section section = sectionRepository.findByUuid(request.getSectionId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Section", "uuid", request.getSectionId()));
+            student.setSection(section);
+        }
+
+        userRepository.save(user);
+        userProfileRepository.save(profile);
+        studentRepository.save(student);
+        return user;
+    }
+
+    @Override
+    @Transactional
+    public User updateStaff(UUID staffId, UpdateStaffRequestDTO request) {
+        Staff staff = staffRepository.findByUuid(staffId)
+                .orElseThrow(() -> new ResourceNotFoundException("Staff", "uuid", staffId));
+
+        UserProfile profile = staff.getUserProfile();
+        User user = profile.getUser();
+
+        if (StringUtils.hasText(request.getEmail()) && !request.getEmail().equalsIgnoreCase(user.getEmail())) {
+            if (userRepository.existsByEmail(request.getEmail())) {
+                throw new UserAlreadyExistsException("Email '" + request.getEmail() + "' already exists.");
+            }
+            user.setEmail(request.getEmail());
+        }
+
+        if (StringUtils.hasText(request.getEmployeeId()) && !request.getEmployeeId().equals(staff.getEmployeeId())) {
+            if (staffRepository.existsByEmployeeId(request.getEmployeeId())) {
+                throw new UserAlreadyExistsException("Staff with employee ID " + request.getEmployeeId() + " already exists.");
+            }
+            userRepository.findByUsername(request.getEmployeeId()).ifPresent(existing -> {
+                if (!existing.getId().equals(user.getId())) {
+                    throw new UserAlreadyExistsException("Username '" + request.getEmployeeId() + "' already exists.");
+                }
+            });
+            staff.setEmployeeId(request.getEmployeeId());
+            user.setUsername(request.getEmployeeId());
+        }
+
+        if (StringUtils.hasText(request.getFirstName())) {
+            profile.setFirstName(request.getFirstName());
+        }
+        if (request.getMiddleName() != null) {
+            profile.setMiddleName(request.getMiddleName());
+        }
+        if (StringUtils.hasText(request.getLastName())) {
+            profile.setLastName(request.getLastName());
+        }
+        if (request.getPreferredName() != null) {
+            profile.setPreferredName(request.getPreferredName());
+        }
+        if (request.getDateOfBirth() != null) {
+            profile.setDateOfBirth(request.getDateOfBirth());
+        }
+        if (request.getGender() != null) {
+            profile.setGender(request.getGender());
+        }
+        if (request.getBio() != null) {
+            profile.setBio(request.getBio());
+        }
+
+        if (StringUtils.hasText(request.getJobTitle())) {
+            staff.setJobTitle(request.getJobTitle());
+        }
+        if (request.getHireDate() != null) {
+            staff.setHireDate(request.getHireDate());
+        }
+        if (request.getOfficeLocation() != null) {
+            staff.setOfficeLocation(request.getOfficeLocation());
+        }
+        if (request.getDepartment() != null) {
+            staff.setDepartment(request.getDepartment());
+        }
+        if (request.getStaffType() != null) {
+            staff.setStaffType(request.getStaffType());
+        }
+
+        userRepository.save(user);
+        userProfileRepository.save(profile);
+        staffRepository.save(staff);
+        return user;
     }
 }

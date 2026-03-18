@@ -1,5 +1,6 @@
 package com.project.edusync.enrollment.service.impl;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.opencsv.CSVReader;
 import com.opencsv.exceptions.CsvException;
 import com.opencsv.exceptions.CsvValidationException;
@@ -8,8 +9,10 @@ import com.project.edusync.adm.repository.SectionRepository;
 import com.project.edusync.common.exception.enrollment.InvalidCsvHeaderException;
 import com.project.edusync.common.exception.enrollment.RelatedResourceNotFoundException;
 import com.project.edusync.common.exception.enrollment.ResourceDuplicateException;
+import com.project.edusync.enrollment.model.dto.BulkImportProgressEvent;
 import com.project.edusync.enrollment.model.dto.BulkImportReportDTO;
 import com.project.edusync.enrollment.service.BulkImportService;
+import com.project.edusync.enrollment.service.SseEmitterRegistry;
 import com.project.edusync.enrollment.util.CsvValidationHelper;
 import com.project.edusync.enrollment.util.RegisterUserByRole;
 import com.project.edusync.iam.model.entity.Role;
@@ -25,6 +28,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -93,21 +97,35 @@ public class BulkImportServiceImpl implements BulkImportService {
     private final StaffRepository staffRepository;
     private final SectionRepository sectionRepository;
     private final CsvValidationHelper validationHelper;
-    private final RegisterUserByRole registerUserByRole; // Helper for saving
+    private final RegisterUserByRole registerUserByRole;
+    private final SseEmitterRegistry sseEmitterRegistry;
+    private final ObjectMapper objectMapper;
+
+    /**
+     * Emits a progress event to the SSE emitter for the given session.
+     * Silently swallows IO errors so that an SSE glitch never aborts the import.
+     */
+    private void emitEvent(String sessionId, BulkImportProgressEvent event) {
+        if (sessionId == null) return;
+        SseEmitter emitter = sseEmitterRegistry.get(sessionId);
+        if (emitter == null) return;
+        try {
+            emitter.send(
+                SseEmitter.event()
+                    .name(event.getEventType())
+                    .data(objectMapper.writeValueAsString(event))
+            );
+        } catch (IOException e) {
+            log.warn("Failed to emit SSE event for session {}: {}", sessionId, e.getMessage());
+        }
+    }
 
     /**
      * Orchestrates the import process.
-     * This method is **NOT** transactional itself.
-     * It validates the header, builds the performance caches, then loops,
-     * delegating the *actual* transactional work to other methods.
-     *
-     * @param file The multipart CSV file uploaded by the user.
-     * @param userType A string ("students" or "staff") indicating the import type.
-     * @return A DTO report summarizing successes and failures.
-     * @throws IOException if the file cannot be read.
+     * This method is NOT transactional itself.
      */
     @Override
-    public BulkImportReportDTO importUsers(MultipartFile file, String userType) throws IOException {
+    public BulkImportReportDTO importUsers(MultipartFile file, String userType, String sessionId) throws IOException {
 
         log.info("Building caches for roles and sections...");
         final Map<String, Role> roleCache = roleRepository.findAll().stream()
@@ -158,30 +176,56 @@ public class BulkImportServiceImpl implements BulkImportService {
             String[] row;
             while ((row = csvReader.readNext()) != null) {
                 rowNumber++;
+                // Extract a human-readable identifier for SSE events (email is col 3)
+                String identifier = (row.length > 3 && row[3] != null && !row[3].isBlank())
+                        ? row[3] : "row-" + rowNumber;
                 try {
-                    // This try-catch now handles DataParsingException,
-                    // ResourceDuplicateException, and RelatedResourceNotFoundException
-                    // on a per-row basis.
                     if (USER_TYPE_STUDENTS.equalsIgnoreCase(userType)) {
                         processStudentRow(row, roleCache, sectionCache);
-                        successCount++;
                     } else if (USER_TYPE_STAFF.equalsIgnoreCase(userType)) {
                         routeStaffRowProcessing(row, roleCache);
-                        successCount++;
                     }
+                    successCount++;
+
+                    // ── Emit ROW_SUCCESS ──────────────────────────────────────────
+                    emitEvent(sessionId, BulkImportProgressEvent.builder()
+                            .rowNumber(rowNumber - 1)
+                            .eventType("ROW_SUCCESS")
+                            .identifier(identifier)
+                            .successCount(successCount)
+                            .failureCount(failureCount)
+                            .build());
+
                 } catch (Exception e) {
-                    // All our custom exceptions will be caught here
                     failureCount++;
                     String errorMessage = e.getMessage();
                     String error = String.format("Row %d: %s", rowNumber, errorMessage);
                     report.getErrorMessages().add(error);
                     log.warn("Failed to process row {}: {}", rowNumber, errorMessage);
+
+                    // ── Emit ROW_FAILURE ──────────────────────────────────────────
+                    emitEvent(sessionId, BulkImportProgressEvent.builder()
+                            .rowNumber(rowNumber - 1)
+                            .eventType("ROW_FAILURE")
+                            .identifier(identifier)
+                            .errorMessage(errorMessage)
+                            .successCount(successCount)
+                            .failureCount(failureCount)
+                            .build());
                 }
             }
         } catch (CsvValidationException | InvalidCsvHeaderException e) {
-            // Catch fatal CSV errors
             report.setStatus("FAILED");
             report.getErrorMessages().add("Fatal Error: " + e.getMessage());
+
+            // ── Emit JOB_FAILED ───────────────────────────────────────────────────
+            emitEvent(sessionId, BulkImportProgressEvent.builder()
+                    .eventType("JOB_FAILED")
+                    .errorMessage("Fatal Error: " + e.getMessage())
+                    .successCount(0)
+                    .failureCount(0)
+                    .build());
+            sseEmitterRegistry.complete(sessionId);
             return report;
         }
 
@@ -189,6 +233,15 @@ public class BulkImportServiceImpl implements BulkImportService {
         report.setTotalRows(rowNumber - 1);
         report.setSuccessCount(successCount);
         report.setFailureCount(failureCount);
+
+        // ── Emit JOB_COMPLETE ─────────────────────────────────────────────────────
+        emitEvent(sessionId, BulkImportProgressEvent.builder()
+                .eventType("JOB_COMPLETE")
+                .totalRows(rowNumber - 1)
+                .successCount(successCount)
+                .failureCount(failureCount)
+                .build());
+        sseEmitterRegistry.complete(sessionId);
         return report;
     }
 

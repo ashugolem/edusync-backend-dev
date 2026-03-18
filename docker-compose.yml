@@ -1,0 +1,16 @@
+services:
+
+  postgres18:
+    image: postgres:17
+    container_name: postgres18
+    environment:
+      POSTGRES_DB: shiksha-intelligence
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  postgres-data:

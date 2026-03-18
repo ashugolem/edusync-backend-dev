@@ -64,7 +64,9 @@ public class DataSeeder implements ApplicationRunner {
                 createRole("ROLE_PRINCIPAL"),
                 createRole("ROLE_LIBRARIAN"),
                 createRole("ROLE_GUARDIAN"),
-                createRole("ROLE_ADMIN")
+                createRole("ROLE_ADMIN"),
+                createRole("ROLE_SUPER_ADMIN"),// For future use, not assigned to anyone yet
+                createRole("ROLE_SCHOOL_ADMIN") // For future use, not assigned to anyone yet
         );
 
         roleRepository.saveAll(roles);

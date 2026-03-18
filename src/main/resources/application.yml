@@ -80,7 +80,7 @@ spring:
   jpa:
     # Allowed only in dev: auto-syncs entity changes to the DB schema.
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     # Enabled only in dev for debugging SQL queries.
     show-sql: true
 

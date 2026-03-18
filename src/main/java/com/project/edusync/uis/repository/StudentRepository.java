@@ -17,27 +17,38 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
     Optional<Student> findByUserProfile(UserProfile profile);
 
     /**
-     * Fetches all students with their UserProfile, User (for email/username),
-     * and Section + AcademicClass eagerly to avoid N+1 queries in list views.
+     * Fetches all students with their UserProfile, User, Section and AcademicClass eagerly.
+     * Explicit countQuery is required when using JOIN FETCH with pagination.
      */
-    @Query("SELECT s FROM Student s " +
-           "JOIN FETCH s.userProfile up " +
-           "JOIN FETCH up.user u " +
-           "JOIN FETCH s.section sec " +
-           "JOIN FETCH sec.academicClass ac")
+    @Query(value = "SELECT s FROM Student s " +
+                   "JOIN FETCH s.userProfile up " +
+                   "JOIN FETCH up.user u " +
+                   "JOIN FETCH s.section sec " +
+                   "JOIN FETCH sec.academicClass ac",
+           countQuery = "SELECT COUNT(s) FROM Student s")
     Page<Student> findAllWithDetails(Pageable pageable);
 
     /**
      * Search students by name, email, or enrollment number (case-insensitive).
+     * Explicit countQuery required for JOIN FETCH + pagination.
      */
-    @Query("SELECT s FROM Student s " +
-           "JOIN FETCH s.userProfile up " +
-           "JOIN FETCH up.user u " +
-           "JOIN FETCH s.section sec " +
-           "JOIN FETCH sec.academicClass ac " +
-           "WHERE LOWER(up.firstName) LIKE LOWER(CONCAT('%', :query, '%')) " +
-           "OR LOWER(up.lastName)    LIKE LOWER(CONCAT('%', :query, '%')) " +
-           "OR LOWER(u.email)        LIKE LOWER(CONCAT('%', :query, '%')) " +
-           "OR LOWER(s.enrollmentNumber) LIKE LOWER(CONCAT('%', :query, '%'))")
+    @Query(value = "SELECT s FROM Student s " +
+                   "JOIN FETCH s.userProfile up " +
+                   "JOIN FETCH up.user u " +
+                   "JOIN FETCH s.section sec " +
+                   "JOIN FETCH sec.academicClass ac " +
+                   "WHERE LOWER(up.firstName) LIKE LOWER(CONCAT('%', :query, '%')) " +
+                   "OR LOWER(up.lastName)     LIKE LOWER(CONCAT('%', :query, '%')) " +
+                   "OR LOWER(u.email)         LIKE LOWER(CONCAT('%', :query, '%')) " +
+                   "OR LOWER(s.enrollmentNumber) LIKE LOWER(CONCAT('%', :query, '%'))",
+           countQuery = "SELECT COUNT(s) FROM Student s " +
+                        "JOIN s.userProfile up " +
+                        "JOIN up.user u " +
+                        "WHERE LOWER(up.firstName) LIKE LOWER(CONCAT('%', :query, '%')) " +
+                        "OR LOWER(up.lastName)     LIKE LOWER(CONCAT('%', :query, '%')) " +
+                        "OR LOWER(u.email)         LIKE LOWER(CONCAT('%', :query, '%')) " +
+                        "OR LOWER(s.enrollmentNumber) LIKE LOWER(CONCAT('%', :query, '%'))")
     Page<Student> searchStudents(@Param("query") String query, Pageable pageable);
+
+    Optional<Student> findByUuid(java.util.UUID uuid);
 }

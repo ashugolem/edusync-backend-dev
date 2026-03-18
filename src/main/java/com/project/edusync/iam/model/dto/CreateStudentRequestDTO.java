@@ -9,6 +9,7 @@ import lombok.EqualsAndHashCode;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
@@ -23,7 +24,7 @@ public class CreateStudentRequestDTO extends CreateUserRequestDTO {
     // ----------------
 
     @NotNull(message = "Section ID is required for enrollment")
-    private Long sectionId;
+    private UUID sectionId;
 
     private LocalDate enrollmentDate;
 

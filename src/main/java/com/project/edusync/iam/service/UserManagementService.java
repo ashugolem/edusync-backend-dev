@@ -47,4 +47,20 @@ public interface UserManagementService {
      * @return The created User entity.
      */
     User createLibrarian(CreateLibrarianRequestDTO request);
+
+    /**
+     * Updates an existing Student record and related profile/user data.
+     * @param studentId The student's UUID.
+     * @param request The update payload.
+     * @return The updated User entity.
+     */
+    User updateStudent(java.util.UUID studentId, com.project.edusync.iam.model.dto.UpdateStudentRequestDTO request);
+
+    /**
+     * Updates an existing Staff record and related profile/user data.
+     * @param staffId The staff's UUID.
+     * @param request The update payload.
+     * @return The updated User entity.
+     */
+    User updateStaff(java.util.UUID staffId, com.project.edusync.iam.model.dto.UpdateStaffRequestDTO request);
 }
