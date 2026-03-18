@@ -277,7 +277,9 @@ public class UserManagementServiceImpl implements UserManagementService {
     @Override
     @Transactional
     public User updateStudent(UUID studentId, UpdateStudentRequestDTO request) {
-        Student student = studentRepository.findByUuid(studentId)
+        log.info("Process started: Updating Student. UUID: {}", studentId);
+
+        Student student = studentRepository.findByUuidAndIsActiveTrue(studentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Student", "uuid", studentId));
 
         UserProfile profile = student.getUserProfile();
@@ -341,13 +343,17 @@ public class UserManagementServiceImpl implements UserManagementService {
         userRepository.save(user);
         userProfileRepository.save(profile);
         studentRepository.save(student);
+
+        log.info("Success: Student updated. UUID: {}", studentId);
         return user;
     }
 
     @Override
     @Transactional
     public User updateStaff(UUID staffId, UpdateStaffRequestDTO request) {
-        Staff staff = staffRepository.findByUuid(staffId)
+        log.info("Process started: Updating Staff. UUID: {}", staffId);
+
+        Staff staff = staffRepository.findByUuidAndIsActiveTrue(staffId)
                 .orElseThrow(() -> new ResourceNotFoundException("Staff", "uuid", staffId));
 
         UserProfile profile = staff.getUserProfile();
@@ -414,6 +420,34 @@ public class UserManagementServiceImpl implements UserManagementService {
         userRepository.save(user);
         userProfileRepository.save(profile);
         staffRepository.save(staff);
+
+        log.info("Success: Staff updated. UUID: {}", staffId);
         return user;
+    }
+
+    @Override
+    @Transactional
+    public void softDeleteStudent(UUID studentId) {
+        log.info("Process started: Soft deleting Student. UUID: {}", studentId);
+
+        Student student = studentRepository.findByUuidAndIsActiveTrue(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student", "uuid", studentId));
+
+        student.setActive(false);
+        studentRepository.save(student);
+        log.info("Student soft deleted successfully. uuid={}", studentId);
+    }
+
+    @Override
+    @Transactional
+    public void softDeleteStaff(UUID staffId) {
+        log.info("Process started: Soft deleting Staff. UUID: {}", staffId);
+
+        Staff staff = staffRepository.findByUuidAndIsActiveTrue(staffId)
+                .orElseThrow(() -> new ResourceNotFoundException("Staff", "uuid", staffId));
+
+        staff.setActive(false);
+        staffRepository.save(staff);
+        log.info("Staff soft deleted successfully. uuid={}", staffId);
     }
 }
