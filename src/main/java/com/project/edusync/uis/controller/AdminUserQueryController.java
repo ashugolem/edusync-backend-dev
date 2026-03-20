@@ -54,6 +54,7 @@ public class AdminUserQueryController {
      * <p><b>Query Params:</b></p>
      * <ul>
      *   <li>{@code search}  – optional keyword to filter by name, email, or enrollment number</li>
+     *   <li>{@code active}  – optional filter by linked user status (true = active, false = inactive)</li>
      *   <li>{@code page}    – zero-based page index (default: 0)</li>
      *   <li>{@code size}    – number of records per page (default: 20, max: 100)</li>
      *   <li>{@code sortBy}  – field to sort by (default: "enrollmentNumber")</li>
@@ -75,6 +76,9 @@ public class AdminUserQueryController {
             @Parameter(description = "Search by name, email, or enrollment number")
             @RequestParam(required = false) String search,
 
+            @Parameter(description = "Filter by linked user status: true (active), false (inactive)")
+            @RequestParam(required = false) Boolean active,
+
             @Parameter(description = "Zero-based page index (default: 0)")
             @RequestParam(defaultValue = "0") int page,
 
@@ -93,10 +97,10 @@ public class AdminUserQueryController {
                 : Sort.by(sortBy).ascending();
         Pageable pageable = PageRequest.of(page, size, sort);
 
-        log.info("Admin API: GET /students | search='{}' | page={} | size={} | sort={}",
-                search, page, size, sortBy + " " + sortDir);
+        log.info("Admin API: GET /students | search='{}' | active='{}' | page={} | size={} | sort={}",
+                search, active, page, size, sortBy + " " + sortDir);
 
-        Page<StudentSummaryDTO> result = adminUserQueryService.getAllStudents(search, pageable);
+        Page<StudentSummaryDTO> result = adminUserQueryService.getAllStudents(search, active, pageable);
         return ResponseEntity.ok(result);
     }
 
@@ -113,6 +117,7 @@ public class AdminUserQueryController {
      * <ul>
      *   <li>{@code search}    – optional keyword to filter by name, email, employeeId, or jobTitle</li>
      *   <li>{@code staffType} – optional filter: TEACHER | PRINCIPAL | LIBRARIAN | etc.</li>
+     *   <li>{@code active}    – optional filter by linked user status (true = active, false = inactive)</li>
      *   <li>{@code page}      – zero-based page index (default: 0)</li>
      *   <li>{@code size}      – number of records per page (default: 20, max: 100)</li>
      *   <li>{@code sortBy}    – field to sort by (default: "employeeId")</li>
@@ -138,6 +143,9 @@ public class AdminUserQueryController {
             @Parameter(description = "Filter by staff type: TEACHER, PRINCIPAL, LIBRARIAN, etc.")
             @RequestParam(required = false) StaffType staffType,
 
+            @Parameter(description = "Filter by linked user status: true (active), false (inactive)")
+            @RequestParam(required = false) Boolean active,
+
             @Parameter(description = "Zero-based page index (default: 0)")
             @RequestParam(defaultValue = "0") int page,
 
@@ -156,10 +164,10 @@ public class AdminUserQueryController {
                 : Sort.by(sortBy).ascending();
         Pageable pageable = PageRequest.of(page, size, sort);
 
-        log.info("Admin API: GET /staff | search='{}' | staffType='{}' | page={} | size={} | sort={}",
-                search, staffType, page, size, sortBy + " " + sortDir);
+        log.info("Admin API: GET /staff | search='{}' | staffType='{}' | active='{}' | page={} | size={} | sort={}",
+                search, staffType, active, page, size, sortBy + " " + sortDir);
 
-        Page<StaffSummaryDTO> result = adminUserQueryService.getAllStaff(search, staffType, pageable);
+        Page<StaffSummaryDTO> result = adminUserQueryService.getAllStaff(search, staffType, active, pageable);
         return ResponseEntity.ok(result);
     }
 }

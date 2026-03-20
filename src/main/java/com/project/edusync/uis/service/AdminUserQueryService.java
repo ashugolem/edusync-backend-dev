@@ -19,19 +19,21 @@ public interface AdminUserQueryService {
      * Returns a paginated list of all students.
      *
      * @param search   Optional search keyword (name, email, enrollmentNumber). Pass null/blank to skip.
+     * @param active   Optional filter by linked user activation status. Pass null to fetch both.
      * @param pageable Pagination and sorting parameters.
      * @return A page of {@link StudentSummaryDTO}.
      */
-    Page<StudentSummaryDTO> getAllStudents(String search, Pageable pageable);
+    Page<StudentSummaryDTO> getAllStudents(String search, Boolean active, Pageable pageable);
 
     /**
      * Returns a paginated list of all staff members.
      *
      * @param search    Optional search keyword (name, email, employeeId, jobTitle). Pass null/blank to skip.
      * @param staffType Optional filter by staff type (TEACHER, PRINCIPAL, etc.). Pass null to fetch all.
+     * @param active    Optional filter by linked user activation status. Pass null to fetch both.
      * @param pageable  Pagination and sorting parameters.
      * @return A page of {@link StaffSummaryDTO}.
      */
-    Page<StaffSummaryDTO> getAllStaff(String search, StaffType staffType, Pageable pageable);
+    Page<StaffSummaryDTO> getAllStaff(String search, StaffType staffType, Boolean active, Pageable pageable);
 }
 

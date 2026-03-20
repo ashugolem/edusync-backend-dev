@@ -74,15 +74,15 @@ public class AdminUserQueryServiceImpl implements AdminUserQueryService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<StudentSummaryDTO> getAllStudents(String search, Pageable pageable) {
+    public Page<StudentSummaryDTO> getAllStudents(String search, Boolean active, Pageable pageable) {
         Pageable resolved = resolveSortFields(pageable, STUDENT_SORT_FIELDS, STUDENT_DEFAULT_SORT);
 
-        log.info("Admin query: getAllStudents | search='{}' | page={} | size={}",
-                search, resolved.getPageNumber(), resolved.getPageSize());
+        log.info("Admin query: getAllStudents | search='{}' | active='{}' | page={} | size={}",
+                search, active, resolved.getPageNumber(), resolved.getPageSize());
 
         Page<Student> studentPage = StringUtils.hasText(search)
-                ? studentRepository.searchStudents(search.trim(), resolved)
-                : studentRepository.findAllWithDetails(resolved);
+                ? studentRepository.searchStudents(search.trim(), active, resolved)
+                : studentRepository.findAllWithDetails(active, resolved);
 
         return studentPage.map(this::toStudentSummaryDTO);
     }
@@ -93,19 +93,19 @@ public class AdminUserQueryServiceImpl implements AdminUserQueryService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<StaffSummaryDTO> getAllStaff(String search, StaffType staffType, Pageable pageable) {
+    public Page<StaffSummaryDTO> getAllStaff(String search, StaffType staffType, Boolean active, Pageable pageable) {
         Pageable resolved = resolveSortFields(pageable, STAFF_SORT_FIELDS, STAFF_DEFAULT_SORT);
 
-        log.info("Admin query: getAllStaff | search='{}' | staffType='{}' | page={} | size={}",
-                search, staffType, resolved.getPageNumber(), resolved.getPageSize());
+        log.info("Admin query: getAllStaff | search='{}' | staffType='{}' | active='{}' | page={} | size={}",
+                search, staffType, active, resolved.getPageNumber(), resolved.getPageSize());
 
         Page<Staff> staffPage;
         if (StringUtils.hasText(search)) {
-            staffPage = staffRepository.searchStaff(search.trim(), resolved);
+            staffPage = staffRepository.searchStaff(search.trim(), active, resolved);
         } else if (staffType != null) {
-            staffPage = staffRepository.findAllByStaffTypeWithDetails(staffType, resolved);
+            staffPage = staffRepository.findAllByStaffTypeWithDetails(staffType, active, resolved);
         } else {
-            staffPage = staffRepository.findAllWithDetails(resolved);
+            staffPage = staffRepository.findAllWithDetails(active, resolved);
         }
 
         return staffPage.map(this::toStaffSummaryDTO);
@@ -153,11 +153,12 @@ public class AdminUserQueryServiceImpl implements AdminUserQueryService {
 
     private StudentSummaryDTO toStudentSummaryDTO(Student student) {
         UserProfile profile = student.getUserProfile();
+        boolean userActive = profile.getUser() != null && profile.getUser().isActive();
         return StudentSummaryDTO.builder()
                 .studentId(student.getId())
                 .uuid(student.getUuid() != null ? student.getUuid().toString() : null)
                 .enrollmentNumber(student.getEnrollmentNumber())
-                .enrollmentStatus(student.isActive() ? "ACTIVE" : "INACTIVE")
+                .enrollmentStatus(userActive ? "ACTIVE" : "INACTIVE")
                 .firstName(profile.getFirstName())
                 .middleName(profile.getMiddleName())
                 .lastName(profile.getLastName())
@@ -174,6 +175,7 @@ public class AdminUserQueryServiceImpl implements AdminUserQueryService {
 
     private StaffSummaryDTO toStaffSummaryDTO(Staff staff) {
         UserProfile profile = staff.getUserProfile();
+        boolean userActive = profile.getUser() != null && profile.getUser().isActive();
         return StaffSummaryDTO.builder()
                 .staffId(staff.getId())
                 .uuid(staff.getUuid() != null ? staff.getUuid().toString() : null)
@@ -190,7 +192,7 @@ public class AdminUserQueryServiceImpl implements AdminUserQueryService {
                 .staffType(staff.getStaffType())
                 .hireDate(staff.getHireDate())
                 .officeLocation(staff.getOfficeLocation())
-                .active(staff.isActive())
+                .active(userActive)
                 .build();
     }
 }

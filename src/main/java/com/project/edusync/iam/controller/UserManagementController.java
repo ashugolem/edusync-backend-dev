@@ -2,6 +2,7 @@ package com.project.edusync.iam.controller;
 
 import com.project.edusync.iam.model.dto.*;
 import com.project.edusync.iam.service.UserManagementService;
+import com.project.edusync.uis.model.dto.profile.ComprehensiveUserProfileResponseDTO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -241,7 +242,7 @@ public class UserManagementController {
     @SecurityRequirement(name = "bearerAuth")
     @Operation(
             summary = "Soft Delete Student",
-            description = "Marks the student as inactive (isActive=false). Inactive students are excluded from listing APIs."
+            description = "Deactivates the User linked to the given Student UUID (user.isActive=false)."
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Student soft deleted successfully"),
@@ -254,7 +255,7 @@ public class UserManagementController {
             @PathVariable java.util.UUID studentId) {
         log.info("API Request: Soft Delete Student [{}]", studentId);
         userManagementService.softDeleteStudent(studentId);
-        return ResponseEntity.ok("Student soft deleted successfully.");
+        return ResponseEntity.ok("Student user deactivated successfully.");
     }
 
     @DeleteMapping("/staff/{staffId}")
@@ -262,7 +263,7 @@ public class UserManagementController {
     @SecurityRequirement(name = "bearerAuth")
     @Operation(
             summary = "Soft Delete Staff",
-            description = "Marks the staff member as inactive (isActive=false). Inactive staff are excluded from listing APIs."
+            description = "Deactivates the User linked to the given Staff UUID (user.isActive=false)."
     )
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Staff soft deleted successfully"),
@@ -275,6 +276,96 @@ public class UserManagementController {
             @PathVariable java.util.UUID staffId) {
         log.info("API Request: Soft Delete Staff [{}]", staffId);
         userManagementService.softDeleteStaff(staffId);
-        return ResponseEntity.ok("Staff soft deleted successfully.");
+        return ResponseEntity.ok("Staff user deactivated successfully.");
+    }
+
+    @PatchMapping("/student/{studentId}/activation")
+    @PreAuthorize("hasAnyAuthority('ROLE_SUPER_ADMIN', 'ROLE_SCHOOL_ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "Activate/Deactivate Student User",
+            description = "Toggles activation status of the User linked to a Student UUID."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Student user activation updated successfully"),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires School Admin or Super Admin privileges"),
+            @ApiResponse(responseCode = "404", description = "Student not found"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<String> setStudentUserActivation(
+            @Parameter(description = "Student UUID", required = true, example = "39170ff6-80ff-4831-bd4d-dbfc07cc2d61")
+            @PathVariable java.util.UUID studentId,
+            @Parameter(description = "Target user activation state", required = true, example = "false")
+            @RequestParam boolean active) {
+        log.info("API Request: Set Student User Activation [{}] => {}", studentId, active);
+        userManagementService.setStudentUserActivation(studentId, active);
+        return ResponseEntity.ok("Student user " + (active ? "activated" : "deactivated") + " successfully.");
+    }
+
+    @PatchMapping("/staff/{staffId}/activation")
+    @PreAuthorize("hasAnyAuthority('ROLE_SUPER_ADMIN', 'ROLE_SCHOOL_ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "Activate/Deactivate Staff User",
+            description = "Toggles activation status of the User linked to a Staff UUID."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Staff user activation updated successfully"),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires School Admin or Super Admin privileges"),
+            @ApiResponse(responseCode = "404", description = "Staff not found"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<String> setStaffUserActivation(
+            @Parameter(description = "Staff UUID", required = true, example = "4e95ad14-20da-4939-b666-841f3259997d")
+            @PathVariable java.util.UUID staffId,
+            @Parameter(description = "Target user activation state", required = true, example = "true")
+            @RequestParam boolean active) {
+        log.info("API Request: Set Staff User Activation [{}] => {}", staffId, active);
+        userManagementService.setStaffUserActivation(staffId, active);
+        return ResponseEntity.ok("Staff user " + (active ? "activated" : "deactivated") + " successfully.");
+    }
+
+    // =================================================================================
+    // 6. FULL DETAILS (ADMIN)
+    // =================================================================================
+
+    @GetMapping("/student/{studentId}/details")
+    @PreAuthorize("hasAnyAuthority('ROLE_SUPER_ADMIN', 'ROLE_SCHOOL_ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "Get Full Student Details",
+            description = "Returns complete profile details for a student by Student UUID. Accessible to School Admin and Super Admin."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Student full details fetched successfully"),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires School Admin or Super Admin privileges"),
+            @ApiResponse(responseCode = "404", description = "Student not found"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<ComprehensiveUserProfileResponseDTO> getStudentFullDetails(
+            @Parameter(description = "Student UUID", required = true, example = "39170ff6-80ff-4831-bd4d-dbfc07cc2d61")
+            @PathVariable java.util.UUID studentId) {
+        log.info("API Request: Get Full Student Details [{}]", studentId);
+        return ResponseEntity.ok(userManagementService.getStudentFullDetails(studentId));
+    }
+
+    @GetMapping("/staff/{staffId}/details")
+    @PreAuthorize("hasAnyAuthority('ROLE_SUPER_ADMIN', 'ROLE_SCHOOL_ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "Get Full Staff Details",
+            description = "Returns complete profile details for a staff member by Staff UUID. Accessible to School Admin and Super Admin."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Staff full details fetched successfully"),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires School Admin or Super Admin privileges"),
+            @ApiResponse(responseCode = "404", description = "Staff not found"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<ComprehensiveUserProfileResponseDTO> getStaffFullDetails(
+            @Parameter(description = "Staff UUID", required = true, example = "4e95ad14-20da-4939-b666-841f3259997d")
+            @PathVariable java.util.UUID staffId) {
+        log.info("API Request: Get Full Staff Details [{}]", staffId);
+        return ResponseEntity.ok(userManagementService.getStaffFullDetails(staffId));
     }
 }

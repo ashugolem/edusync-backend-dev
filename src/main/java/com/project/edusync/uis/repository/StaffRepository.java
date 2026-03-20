@@ -24,9 +24,12 @@ public interface StaffRepository extends JpaRepository<Staff, Long> {
     @Query(value = "SELECT st FROM Staff st " +
                    "JOIN FETCH st.userProfile up " +
                    "JOIN FETCH up.user u " +
-                   "WHERE st.isActive = true",
-           countQuery = "SELECT COUNT(st) FROM Staff st WHERE st.isActive = true")
-    Page<Staff> findAllWithDetails(Pageable pageable);
+                   "WHERE (:active IS NULL OR u.isActive = :active)",
+           countQuery = "SELECT COUNT(st) FROM Staff st " +
+                        "JOIN st.userProfile up " +
+                        "JOIN up.user u " +
+                        "WHERE (:active IS NULL OR u.isActive = :active)")
+    Page<Staff> findAllWithDetails(@Param("active") Boolean active, Pageable pageable);
 
     /**
      * Fetches staff filtered by StaffType with eager joins.
@@ -34,9 +37,12 @@ public interface StaffRepository extends JpaRepository<Staff, Long> {
     @Query(value = "SELECT st FROM Staff st " +
                    "JOIN FETCH st.userProfile up " +
                    "JOIN FETCH up.user u " +
-                   "WHERE st.isActive = true AND st.staffType = :staffType",
-           countQuery = "SELECT COUNT(st) FROM Staff st WHERE st.isActive = true AND st.staffType = :staffType")
-    Page<Staff> findAllByStaffTypeWithDetails(@Param("staffType") StaffType staffType, Pageable pageable);
+                   "WHERE st.staffType = :staffType AND (:active IS NULL OR u.isActive = :active)",
+           countQuery = "SELECT COUNT(st) FROM Staff st " +
+                        "JOIN st.userProfile up " +
+                        "JOIN up.user u " +
+                        "WHERE st.staffType = :staffType AND (:active IS NULL OR u.isActive = :active)")
+    Page<Staff> findAllByStaffTypeWithDetails(@Param("staffType") StaffType staffType, @Param("active") Boolean active, Pageable pageable);
 
     /**
      * Search staff by name, email, employeeId, or jobTitle (case-insensitive).
@@ -44,7 +50,7 @@ public interface StaffRepository extends JpaRepository<Staff, Long> {
     @Query(value = "SELECT st FROM Staff st " +
                    "JOIN FETCH st.userProfile up " +
                    "JOIN FETCH up.user u " +
-                   "WHERE st.isActive = true AND (" +
+                   "WHERE (:active IS NULL OR u.isActive = :active) AND (" +
                    "LOWER(up.firstName)  LIKE LOWER(CONCAT('%', :query, '%')) " +
                    "OR LOWER(up.lastName)      LIKE LOWER(CONCAT('%', :query, '%')) " +
                    "OR LOWER(u.email)          LIKE LOWER(CONCAT('%', :query, '%')) " +
@@ -53,15 +59,13 @@ public interface StaffRepository extends JpaRepository<Staff, Long> {
            countQuery = "SELECT COUNT(st) FROM Staff st " +
                         "JOIN st.userProfile up " +
                         "JOIN up.user u " +
-                        "WHERE st.isActive = true AND (" +
+                        "WHERE (:active IS NULL OR u.isActive = :active) AND (" +
                         "LOWER(up.firstName)  LIKE LOWER(CONCAT('%', :query, '%')) " +
                         "OR LOWER(up.lastName)      LIKE LOWER(CONCAT('%', :query, '%')) " +
                         "OR LOWER(u.email)          LIKE LOWER(CONCAT('%', :query, '%')) " +
                         "OR LOWER(st.employeeId)    LIKE LOWER(CONCAT('%', :query, '%')) " +
                         "OR LOWER(st.jobTitle)      LIKE LOWER(CONCAT('%', :query, '%'))) ")
-    Page<Staff> searchStaff(@Param("query") String query, Pageable pageable);
+    Page<Staff> searchStaff(@Param("query") String query, @Param("active") Boolean active, Pageable pageable);
 
     Optional<Staff> findByUuid(java.util.UUID uuid);
-
-    Optional<Staff> findByUuidAndIsActiveTrue(java.util.UUID uuid);
 }

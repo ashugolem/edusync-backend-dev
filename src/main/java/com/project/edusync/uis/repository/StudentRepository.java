@@ -25,9 +25,12 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
                    "JOIN FETCH up.user u " +
                    "JOIN FETCH s.section sec " +
                    "JOIN FETCH sec.academicClass ac " +
-                   "WHERE s.isActive = true",
-           countQuery = "SELECT COUNT(s) FROM Student s WHERE s.isActive = true")
-    Page<Student> findAllWithDetails(Pageable pageable);
+                   "WHERE (:active IS NULL OR u.isActive = :active)",
+           countQuery = "SELECT COUNT(s) FROM Student s " +
+                        "JOIN s.userProfile up " +
+                        "JOIN up.user u " +
+                        "WHERE (:active IS NULL OR u.isActive = :active)")
+    Page<Student> findAllWithDetails(@Param("active") Boolean active, Pageable pageable);
 
     /**
      * Search students by name, email, or enrollment number (case-insensitive).
@@ -38,7 +41,7 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
                    "JOIN FETCH up.user u " +
                    "JOIN FETCH s.section sec " +
                    "JOIN FETCH sec.academicClass ac " +
-                   "WHERE s.isActive = true AND (" +
+                   "WHERE (:active IS NULL OR u.isActive = :active) AND (" +
                    "LOWER(up.firstName) LIKE LOWER(CONCAT('%', :query, '%')) " +
                    "OR LOWER(up.lastName)     LIKE LOWER(CONCAT('%', :query, '%')) " +
                    "OR LOWER(u.email)         LIKE LOWER(CONCAT('%', :query, '%')) " +
@@ -46,14 +49,12 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
            countQuery = "SELECT COUNT(s) FROM Student s " +
                         "JOIN s.userProfile up " +
                         "JOIN up.user u " +
-                        "WHERE s.isActive = true AND (" +
+                        "WHERE (:active IS NULL OR u.isActive = :active) AND (" +
                         "LOWER(up.firstName) LIKE LOWER(CONCAT('%', :query, '%')) " +
                         "OR LOWER(up.lastName)     LIKE LOWER(CONCAT('%', :query, '%')) " +
                         "OR LOWER(u.email)         LIKE LOWER(CONCAT('%', :query, '%')) " +
                         "OR LOWER(s.enrollmentNumber) LIKE LOWER(CONCAT('%', :query, '%'))) ")
-    Page<Student> searchStudents(@Param("query") String query, Pageable pageable);
+    Page<Student> searchStudents(@Param("query") String query, @Param("active") Boolean active, Pageable pageable);
 
     Optional<Student> findByUuid(java.util.UUID uuid);
-
-    Optional<Student> findByUuidAndIsActiveTrue(java.util.UUID uuid);
 }

@@ -21,12 +21,14 @@ import com.project.edusync.uis.model.entity.details.PrincipalDetails;
 import com.project.edusync.uis.model.entity.details.StudentDemographics;
 import com.project.edusync.uis.model.entity.details.TeacherDetails;
 import com.project.edusync.uis.model.entity.medical.StudentMedicalRecord;
+import com.project.edusync.uis.model.dto.profile.ComprehensiveUserProfileResponseDTO;
 import com.project.edusync.uis.repository.*;
 import com.project.edusync.uis.repository.details.LibrarianDetailsRepository;
 import com.project.edusync.uis.repository.details.PrincipalDetailsRepository;
 import com.project.edusync.uis.repository.details.StudentDemographicsRepository;
 import com.project.edusync.uis.repository.details.TeacherDetailsRepository;
 import com.project.edusync.uis.repository.medical.StudentMedicalRecordRepository;
+import com.project.edusync.uis.service.ProfileService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -82,6 +84,7 @@ public class UserManagementServiceImpl implements UserManagementService {
     private final TeacherMapper teacherMapper;
     private final PrincipalMapper principalMapper;
     private final LibrarianMapper librarianMapper;
+    private final ProfileService profileService;
 
     // =================================================================================
     // 1. SCHOOL ADMIN
@@ -279,7 +282,7 @@ public class UserManagementServiceImpl implements UserManagementService {
     public User updateStudent(UUID studentId, UpdateStudentRequestDTO request) {
         log.info("Process started: Updating Student. UUID: {}", studentId);
 
-        Student student = studentRepository.findByUuidAndIsActiveTrue(studentId)
+        Student student = studentRepository.findByUuid(studentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Student", "uuid", studentId));
 
         UserProfile profile = student.getUserProfile();
@@ -353,7 +356,7 @@ public class UserManagementServiceImpl implements UserManagementService {
     public User updateStaff(UUID staffId, UpdateStaffRequestDTO request) {
         log.info("Process started: Updating Staff. UUID: {}", staffId);
 
-        Staff staff = staffRepository.findByUuidAndIsActiveTrue(staffId)
+        Staff staff = staffRepository.findByUuid(staffId)
                 .orElseThrow(() -> new ResourceNotFoundException("Staff", "uuid", staffId));
 
         UserProfile profile = staff.getUserProfile();
@@ -430,12 +433,12 @@ public class UserManagementServiceImpl implements UserManagementService {
     public void softDeleteStudent(UUID studentId) {
         log.info("Process started: Soft deleting Student. UUID: {}", studentId);
 
-        Student student = studentRepository.findByUuidAndIsActiveTrue(studentId)
+        Student student = studentRepository.findByUuid(studentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Student", "uuid", studentId));
-
-        student.setActive(false);
-        studentRepository.save(student);
-        log.info("Student soft deleted successfully. uuid={}", studentId);
+        User user = student.getUserProfile().getUser();
+        user.setActive(false);
+        userRepository.save(user);
+        log.info("Student user deactivated successfully. studentUuid={}, userId={}", studentId, user.getId());
     }
 
     @Override
@@ -443,11 +446,73 @@ public class UserManagementServiceImpl implements UserManagementService {
     public void softDeleteStaff(UUID staffId) {
         log.info("Process started: Soft deleting Staff. UUID: {}", staffId);
 
-        Staff staff = staffRepository.findByUuidAndIsActiveTrue(staffId)
+        Staff staff = staffRepository.findByUuid(staffId)
+                .orElseThrow(() -> new ResourceNotFoundException("Staff", "uuid", staffId));
+        User user = staff.getUserProfile().getUser();
+        user.setActive(false);
+        userRepository.save(user);
+        log.info("Staff user deactivated successfully. staffUuid={}, userId={}", staffId, user.getId());
+    }
+
+    @Override
+    @Transactional
+    public void setStudentUserActivation(UUID studentId, boolean active) {
+        log.info("Process started: Setting Student user activation. studentUuid={}, active={}", studentId, active);
+
+        Student student = studentRepository.findByUuid(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student", "uuid", studentId));
+
+        User user = student.getUserProfile().getUser();
+        user.setActive(active);
+        userRepository.save(user);
+
+        log.info("Success: Student user activation updated. studentUuid={}, userId={}, active={}",
+                studentId, user.getId(), active);
+    }
+
+    @Override
+    @Transactional
+    public void setStaffUserActivation(UUID staffId, boolean active) {
+        log.info("Process started: Setting Staff user activation. staffUuid={}, active={}", staffId, active);
+
+        Staff staff = staffRepository.findByUuid(staffId)
                 .orElseThrow(() -> new ResourceNotFoundException("Staff", "uuid", staffId));
 
-        staff.setActive(false);
-        staffRepository.save(staff);
-        log.info("Staff soft deleted successfully. uuid={}", staffId);
+        User user = staff.getUserProfile().getUser();
+        user.setActive(active);
+        userRepository.save(user);
+
+        log.info("Success: Staff user activation updated. staffUuid={}, userId={}, active={}",
+                staffId, user.getId(), active);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ComprehensiveUserProfileResponseDTO getStudentFullDetails(UUID studentId) {
+        log.info("Process started: Fetching full Student details. UUID: {}", studentId);
+
+        Student student = studentRepository.findByUuid(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student", "uuid", studentId));
+
+        Long userId = student.getUserProfile().getUser().getId();
+        ComprehensiveUserProfileResponseDTO response = profileService.getProfileByUserId(userId);
+
+        log.info("Success: Full Student details fetched. Student UUID: {}, User ID: {}", studentId, userId);
+        return response;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ComprehensiveUserProfileResponseDTO getStaffFullDetails(UUID staffId) {
+        log.info("Process started: Fetching full Staff details. UUID: {}", staffId);
+
+        Staff staff = staffRepository.findByUuid(staffId)
+                .orElseThrow(() -> new ResourceNotFoundException("Staff", "uuid", staffId));
+
+        Long userId = staff.getUserProfile().getUser().getId();
+        ComprehensiveUserProfileResponseDTO response = profileService.getProfileByUserId(userId);
+
+        log.info("Success: Full Staff details fetched. Staff UUID: {}, User ID: {}", staffId, userId);
+        return response;
     }
 }
