@@ -54,6 +54,20 @@ app:
   security:
     max-devices: 2
 
+  media:
+    provider: ${MEDIA_PROVIDER:cloudinary}
+    max-file-size-bytes: ${MEDIA_MAX_FILE_SIZE_BYTES:5242880}
+    upload-init-ttl-seconds: ${MEDIA_UPLOAD_INIT_TTL_SECONDS:300}
+    allowed-content-types: ${MEDIA_ALLOWED_CONTENT_TYPES:image/jpeg,image/png,image/webp}
+    allowed-secure-url-prefixes: ${MEDIA_ALLOWED_SECURE_URL_PREFIXES:https://res.cloudinary.com/}
+    cloudinary:
+      cloud-name: ${CLOUDINARY_CLOUD_NAME:}
+      api-key: ${CLOUDINARY_API_KEY:}
+      api-secret: ${CLOUDINARY_API_SECRET:}
+      folder: ${CLOUDINARY_UPLOAD_FOLDER:profiles}
+    s3:
+      upload-url-template: ${S3_UPLOAD_URL_TEMPLATE:}
+
 # NOTE: 'api.url' is kept at the root namespace as it is referenced
 # directly via @RequestMapping("${api.url}/...") across all controllers.
 api:

@@ -1,10 +1,15 @@
 package com.project.edusync.uis.service.impl;
 
+import com.project.edusync.common.exception.EdusyncException;
 import com.project.edusync.common.exception.ResourceNotFoundException;
 import com.project.edusync.iam.model.entity.User;
 import com.project.edusync.iam.repository.UserRepository;
+import com.project.edusync.uis.config.MediaUploadProperties;
 import com.project.edusync.uis.mapper.*;
 import com.project.edusync.uis.model.dto.profile.ComprehensiveUserProfileResponseDTO;
+import com.project.edusync.uis.model.dto.profile.ProfileImageUploadCompleteRequestDTO;
+import com.project.edusync.uis.model.dto.profile.ProfileImageUploadInitRequestDTO;
+import com.project.edusync.uis.model.dto.profile.ProfileImageUploadInitResponseDTO;
 import com.project.edusync.uis.model.dto.profile.StaffProfileDTO;
 import com.project.edusync.uis.model.dto.profile.UserProfileDTO;
 import com.project.edusync.uis.model.dto.profile.UserProfileUpdateDTO;
@@ -17,10 +22,19 @@ import com.project.edusync.uis.repository.details.TeacherDetailsRepository;
 import com.project.edusync.uis.service.ProfileService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -56,6 +70,7 @@ public class ProfileServiceImpl implements ProfileService {
     private final StudentMapper studentMapper;
     private final StaffMapper staffMapper;
     private final GuardianMapper guardianMapper;
+    private final MediaUploadProperties mediaUploadProperties;
 
     /**
      * Retrieves the full profile for a user, including all their associated roles.
@@ -205,5 +220,142 @@ public class ProfileServiceImpl implements ProfileService {
         log.info("Profile updated successfully for User ID: {}", userId);
 
         return userProfileMapper.toDto(savedProfile, user);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ProfileImageUploadInitResponseDTO initiateProfileImageUpload(Long userId, ProfileImageUploadInitRequestDTO request) {
+        log.info("Request received to initialize profile image upload for User ID: {}", userId);
+
+        validateUploadInitRequest(request);
+        User user = findUserById(userId);
+        String objectKey = buildObjectKey(user, request.getFileName());
+        Instant expiresAt = Instant.now().plusSeconds(mediaUploadProperties.getUploadInitTtlSeconds());
+
+        String provider = normalizeProvider(mediaUploadProperties.getProvider());
+        if ("cloudinary".equals(provider)) {
+            MediaUploadProperties.Cloudinary cfg = mediaUploadProperties.getCloudinary();
+            if (!StringUtils.hasText(cfg.getCloudName()) || !StringUtils.hasText(cfg.getApiKey()) || !StringUtils.hasText(cfg.getApiSecret())) {
+                throw new EdusyncException("Cloudinary upload is not configured properly.", HttpStatus.INTERNAL_SERVER_ERROR);
+            }
+
+            String timestamp = String.valueOf(Instant.now().getEpochSecond());
+            String folder = cfg.getFolder();
+            String signatureBase = "folder=" + folder + "&public_id=" + objectKey + "&timestamp=" + timestamp;
+            String signature = sha1Hex(signatureBase + cfg.getApiSecret());
+
+            Map<String, String> fields = new HashMap<>();
+            fields.put("api_key", cfg.getApiKey());
+            fields.put("timestamp", timestamp);
+            fields.put("signature", signature);
+            fields.put("folder", folder);
+            fields.put("public_id", objectKey);
+
+            return ProfileImageUploadInitResponseDTO.builder()
+                    .provider("cloudinary")
+                    .method("POST")
+                    .uploadUrl("https://api.cloudinary.com/v1_1/" + cfg.getCloudName() + "/image/upload")
+                    .objectKey(objectKey)
+                    .expiresAt(expiresAt)
+                    .fields(fields)
+                    .headers(Map.of())
+                    .build();
+        }
+
+        if ("s3".equals(provider)) {
+            String template = mediaUploadProperties.getS3().getUploadUrlTemplate();
+            if (!StringUtils.hasText(template)) {
+                throw new EdusyncException("S3 upload URL template is not configured.", HttpStatus.INTERNAL_SERVER_ERROR);
+            }
+            String uploadUrl = template.replace("{objectKey}", objectKey);
+            return ProfileImageUploadInitResponseDTO.builder()
+                    .provider("s3")
+                    .method("PUT")
+                    .uploadUrl(uploadUrl)
+                    .objectKey(objectKey)
+                    .expiresAt(expiresAt)
+                    .fields(Map.of())
+                    .headers(Map.of("Content-Type", request.getContentType()))
+                    .build();
+        }
+
+        throw new EdusyncException("Unsupported media provider: " + provider, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    @Override
+    @Transactional
+    public UserProfileDTO completeProfileImageUpload(Long userId, ProfileImageUploadCompleteRequestDTO request) {
+        log.info("Request received to complete profile image upload for User ID: {}", userId);
+
+        User user = findUserById(userId);
+        UserProfile profile = userProfileRepository.findByUser(user)
+                .orElseThrow(() -> new ResourceNotFoundException("UserProfile", "userId", userId));
+
+        String expectedPrefix = "profiles/" + user.getUuid() + "/";
+        if (!request.getObjectKey().startsWith(expectedPrefix)) {
+            throw new EdusyncException("Invalid objectKey for this user.", HttpStatus.FORBIDDEN);
+        }
+
+        validateSecureUrl(request.getSecureUrl());
+        profile.setProfileUrl(request.getSecureUrl());
+
+        UserProfile saved = userProfileRepository.save(profile);
+        log.info("Profile image URL saved successfully for User ID: {}", userId);
+        return userProfileMapper.toDto(saved, user);
+    }
+
+    private void validateUploadInitRequest(ProfileImageUploadInitRequestDTO request) {
+        if (request.getSizeBytes() > mediaUploadProperties.getMaxFileSizeBytes()) {
+            throw new EdusyncException("File size exceeds allowed limit.", HttpStatus.BAD_REQUEST);
+        }
+        if (mediaUploadProperties.getAllowedContentTypes().stream().noneMatch(t -> t.equalsIgnoreCase(request.getContentType()))) {
+            throw new EdusyncException("Unsupported content type: " + request.getContentType(), HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private void validateSecureUrl(String secureUrl) {
+        if (!StringUtils.hasText(secureUrl) || !secureUrl.startsWith("https://")) {
+            throw new EdusyncException("secureUrl must be HTTPS.", HttpStatus.BAD_REQUEST);
+        }
+        List<String> prefixes = mediaUploadProperties.getAllowedSecureUrlPrefixes();
+        if (prefixes != null && !prefixes.isEmpty()) {
+            boolean allowed = prefixes.stream().anyMatch(secureUrl::startsWith);
+            if (!allowed) {
+                throw new EdusyncException("secureUrl is not from an allowed CDN host.", HttpStatus.BAD_REQUEST);
+            }
+        }
+    }
+
+    private User findUserById(Long userId) {
+        return userRepository.findById(userId.intValue())
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+    }
+
+    private String buildObjectKey(User user, String fileName) {
+        String safeName = sanitizeFileName(fileName);
+        return "profiles/" + user.getUuid() + "/" + Instant.now().getEpochSecond() + "_" + UUID.randomUUID() + "_" + safeName;
+    }
+
+    private String sanitizeFileName(String fileName) {
+        String base = fileName.replaceAll("[^a-zA-Z0-9._-]", "_");
+        return StringUtils.hasText(base) ? base : "avatar.jpg";
+    }
+
+    private String normalizeProvider(String provider) {
+        return provider == null ? "cloudinary" : provider.trim().toLowerCase();
+    }
+
+    private String sha1Hex(String value) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-1");
+            byte[] hash = md.digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new EdusyncException("Could not generate upload signature.", HttpStatus.INTERNAL_SERVER_ERROR, e);
+        }
     }
 }
