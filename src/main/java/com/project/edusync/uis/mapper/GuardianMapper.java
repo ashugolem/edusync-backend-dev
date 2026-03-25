@@ -18,7 +18,8 @@ public interface GuardianMapper {
      * MapStruct automatically iterates over the 'studentRelationships' set
      * and uses the 'toLinkedStudentDto' method for each item.
      */
-    @Mapping(source = "id", target = "guardianId")
+    @Mapping(source = "uuid", target = "guardianUuid")
+    @Mapping(source = "userProfile.profileUrl", target = "profileUrl")
     @Mapping(source = "studentRelationships", target = "linkedStudents")
     GuardianProfileDTO toDto(Guardian guardian);
 
@@ -30,7 +31,8 @@ public interface GuardianMapper {
      * to traverse this graph safely.
      * </p>
      */
-    @Mapping(source = "student.id", target = "studentId")
+    @Mapping(source = "student.uuid", target = "studentUuid")
+    @Mapping(source = "student.userProfile.profileUrl", target = "profileUrl")
     @Mapping(source = "student.enrollmentNumber", target = "enrollmentNo")
     @Mapping(target = "studentName", expression = "java(getStudentFullName(relationship))")
     @Mapping(source = "relationshipType", target = "relationshipType")

@@ -3,6 +3,9 @@ package com.project.edusync.iam.controller;
 import com.project.edusync.iam.model.dto.*;
 import com.project.edusync.iam.service.UserManagementService;
 import com.project.edusync.uis.model.dto.profile.ComprehensiveUserProfileResponseDTO;
+import com.project.edusync.uis.model.dto.profile.GuardianProfileDTO;
+import com.project.edusync.uis.model.dto.profile.LinkedStudentDTO;
+import com.project.edusync.uis.model.dto.profile.StudentGuardianDTO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -16,6 +19,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 /**
  * Controller for Admin-level User Management.
@@ -173,6 +178,92 @@ public class UserManagementController {
         return ResponseEntity.status(HttpStatus.CREATED).body("Librarian created successfully.");
     }
 
+    @PostMapping("/student/{studentId}/guardian")
+    @PreAuthorize("hasAnyAuthority('ROLE_SUPER_ADMIN', 'ROLE_SCHOOL_ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "Add Guardian for Student",
+            description = "Creates a guardian user and links that guardian with the provided student UUID."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "201", description = "Guardian added successfully"),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires School Admin or Super Admin privileges"),
+            @ApiResponse(responseCode = "404", description = "Student not found"),
+            @ApiResponse(responseCode = "409", description = "Conflict - Username or email already exists"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<String> createGuardian(
+            @Parameter(description = "Student UUID", required = true, example = "39170ff6-80ff-4831-bd4d-dbfc07cc2d61")
+            @PathVariable java.util.UUID studentId,
+            @Valid @RequestBody CreateGuardianRequestDTO request) {
+        log.info("API Request: Add Guardian [{}] for Student [{}]", request.getUsername(), studentId);
+        userManagementService.createGuardian(studentId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body("Guardian added successfully.");
+    }
+
+    @PostMapping("/student/{studentId}/guardian/link")
+    @PreAuthorize("hasAnyAuthority('ROLE_SUPER_ADMIN', 'ROLE_SCHOOL_ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "Link Existing Guardian to Student",
+            description = "Links an already existing guardian to the given student without creating a new guardian account."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "201", description = "Guardian linked successfully"),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires School Admin or Super Admin privileges"),
+            @ApiResponse(responseCode = "404", description = "Student or guardian not found"),
+            @ApiResponse(responseCode = "409", description = "Conflict - guardian already linked to student"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<String> linkExistingGuardian(
+            @Parameter(description = "Student UUID", required = true, example = "39170ff6-80ff-4831-bd4d-dbfc07cc2d61")
+            @PathVariable java.util.UUID studentId,
+            @Valid @RequestBody LinkGuardianRequestDTO request) {
+        log.info("API Request: Link existing Guardian [{}] to Student [{}]", request.getGuardianId(), studentId);
+        userManagementService.linkExistingGuardian(studentId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body("Guardian linked successfully.");
+    }
+
+    @GetMapping("/student/{studentId}/guardians")
+    @PreAuthorize("hasAnyAuthority('ROLE_SUPER_ADMIN', 'ROLE_SCHOOL_ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "Get Guardians of Student",
+            description = "Returns all guardians linked with the specified student UUID."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Guardians fetched successfully"),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires School Admin or Super Admin privileges"),
+            @ApiResponse(responseCode = "404", description = "Student not found"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<List<StudentGuardianDTO>> getStudentGuardians(
+            @Parameter(description = "Student UUID", required = true, example = "39170ff6-80ff-4831-bd4d-dbfc07cc2d61")
+            @PathVariable java.util.UUID studentId) {
+        log.info("API Request: Get Guardians for Student [{}]", studentId);
+        return ResponseEntity.ok(userManagementService.getGuardiansByStudent(studentId));
+    }
+
+    @GetMapping("/guardian/{guardianId}/linked-students")
+    @PreAuthorize("hasAnyAuthority('ROLE_SUPER_ADMIN', 'ROLE_SCHOOL_ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "Get Linked Students of Guardian",
+            description = "Returns only student linkage list for a guardian UUID."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Linked students fetched successfully"),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires School Admin or Super Admin privileges"),
+            @ApiResponse(responseCode = "404", description = "Guardian not found"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<List<LinkedStudentDTO>> getGuardianLinkedStudents(
+            @Parameter(description = "Guardian UUID", required = true, example = "51d020cc-b89f-42dc-98a3-b4fa88b66331")
+            @PathVariable java.util.UUID guardianId) {
+        log.info("API Request: Get Linked Students for Guardian [{}]", guardianId);
+        return ResponseEntity.ok(userManagementService.getLinkedStudentsByGuardian(guardianId));
+    }
+
     // =================================================================================
     // 4. EDIT STUDENT / STAFF
     // =================================================================================
@@ -233,6 +324,31 @@ public class UserManagementController {
         return ResponseEntity.ok("Staff updated successfully.");
     }
 
+    @PutMapping("/student/{studentId}/guardian/{guardianId}")
+    @PreAuthorize("hasAnyAuthority('ROLE_SUPER_ADMIN', 'ROLE_SCHOOL_ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "Edit Guardian of Student",
+            description = "Updates guardian identity/profile fields and guardian-student relationship metadata."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Guardian updated successfully"),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires School Admin or Super Admin privileges"),
+            @ApiResponse(responseCode = "404", description = "Student, guardian, or relationship not found"),
+            @ApiResponse(responseCode = "409", description = "Conflict - email already exists"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<String> updateGuardian(
+            @Parameter(description = "Student UUID", required = true, example = "39170ff6-80ff-4831-bd4d-dbfc07cc2d61")
+            @PathVariable java.util.UUID studentId,
+            @Parameter(description = "Guardian UUID", required = true, example = "51d020cc-b89f-42dc-98a3-b4fa88b66331")
+            @PathVariable java.util.UUID guardianId,
+            @Valid @RequestBody UpdateGuardianRequestDTO request) {
+        log.info("API Request: Update Guardian [{}] for Student [{}]", guardianId, studentId);
+        userManagementService.updateGuardian(studentId, guardianId, request);
+        return ResponseEntity.ok("Guardian updated successfully.");
+    }
+
     // =================================================================================
     // 5. SOFT DELETE STUDENT / STAFF
     // =================================================================================
@@ -279,6 +395,52 @@ public class UserManagementController {
         return ResponseEntity.ok("Staff user deactivated successfully.");
     }
 
+    @DeleteMapping("/student/{studentId}/guardian/{guardianId}")
+    @PreAuthorize("hasAnyAuthority('ROLE_SUPER_ADMIN', 'ROLE_SCHOOL_ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "Deactivate Guardian of Student",
+            description = "Deactivates the guardian user linked with the specified student."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Guardian deactivated successfully"),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires School Admin or Super Admin privileges"),
+            @ApiResponse(responseCode = "404", description = "Student, guardian, or relationship not found"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<String> softDeleteGuardian(
+            @Parameter(description = "Student UUID", required = true, example = "39170ff6-80ff-4831-bd4d-dbfc07cc2d61")
+            @PathVariable java.util.UUID studentId,
+            @Parameter(description = "Guardian UUID", required = true, example = "51d020cc-b89f-42dc-98a3-b4fa88b66331")
+            @PathVariable java.util.UUID guardianId) {
+        log.info("API Request: Soft Delete Guardian [{}] for Student [{}]", guardianId, studentId);
+        userManagementService.softDeleteGuardian(studentId, guardianId);
+        return ResponseEntity.ok("Guardian deactivated successfully.");
+    }
+
+    @DeleteMapping("/student/{studentId}/guardian/{guardianId}/unlink")
+    @PreAuthorize("hasAnyAuthority('ROLE_SUPER_ADMIN', 'ROLE_SCHOOL_ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "Unlink Guardian From Student",
+            description = "Removes only the guardian-student relationship metadata without deactivating the guardian account."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Guardian unlinked successfully"),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires School Admin or Super Admin privileges"),
+            @ApiResponse(responseCode = "404", description = "Student, guardian, or relationship not found"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<String> unlinkGuardian(
+            @Parameter(description = "Student UUID", required = true, example = "39170ff6-80ff-4831-bd4d-dbfc07cc2d61")
+            @PathVariable java.util.UUID studentId,
+            @Parameter(description = "Guardian UUID", required = true, example = "51d020cc-b89f-42dc-98a3-b4fa88b66331")
+            @PathVariable java.util.UUID guardianId) {
+        log.info("API Request: Unlink Guardian [{}] from Student [{}]", guardianId, studentId);
+        userManagementService.unlinkGuardian(studentId, guardianId);
+        return ResponseEntity.ok("Guardian unlinked successfully.");
+    }
+
     @PatchMapping("/student/{studentId}/activation")
     @PreAuthorize("hasAnyAuthority('ROLE_SUPER_ADMIN', 'ROLE_SCHOOL_ADMIN')")
     @SecurityRequirement(name = "bearerAuth")
@@ -323,6 +485,31 @@ public class UserManagementController {
         log.info("API Request: Set Staff User Activation [{}] => {}", staffId, active);
         userManagementService.setStaffUserActivation(staffId, active);
         return ResponseEntity.ok("Staff user " + (active ? "activated" : "deactivated") + " successfully.");
+    }
+
+    @PatchMapping("/student/{studentId}/guardian/{guardianId}/activation")
+    @PreAuthorize("hasAnyAuthority('ROLE_SUPER_ADMIN', 'ROLE_SCHOOL_ADMIN')")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(
+            summary = "Activate/Deactivate Guardian of Student",
+            description = "Toggles activation status of a guardian linked to the specified student."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Guardian activation updated successfully"),
+            @ApiResponse(responseCode = "403", description = "Forbidden - Requires School Admin or Super Admin privileges"),
+            @ApiResponse(responseCode = "404", description = "Student, guardian, or relationship not found"),
+            @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    public ResponseEntity<String> setGuardianUserActivation(
+            @Parameter(description = "Student UUID", required = true, example = "39170ff6-80ff-4831-bd4d-dbfc07cc2d61")
+            @PathVariable java.util.UUID studentId,
+            @Parameter(description = "Guardian UUID", required = true, example = "51d020cc-b89f-42dc-98a3-b4fa88b66331")
+            @PathVariable java.util.UUID guardianId,
+            @Parameter(description = "Target guardian activation state", required = true, example = "true")
+            @RequestParam boolean active) {
+        log.info("API Request: Set Guardian Activation [{}] for Student [{}] => {}", guardianId, studentId, active);
+        userManagementService.setGuardianUserActivation(studentId, guardianId, active);
+        return ResponseEntity.ok("Guardian " + (active ? "activated" : "deactivated") + " successfully.");
     }
 
     // =================================================================================

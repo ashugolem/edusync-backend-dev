@@ -5,12 +5,16 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
+import java.util.UUID;
 
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
 public class GuardianProfileDTO {
-    private Long guardianId;
+    private UUID guardianUuid;
+    private String name;
+    private String relation;
+    private String profileUrl;
     private String occupation;
     private String employer;
     // ... other fields from Guardian.java

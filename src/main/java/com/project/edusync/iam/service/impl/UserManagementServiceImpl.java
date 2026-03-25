@@ -15,13 +15,18 @@ import com.project.edusync.iam.service.UserManagementService;
 import com.project.edusync.uis.mapper.*;
 import com.project.edusync.uis.model.entity.Staff;
 import com.project.edusync.uis.model.entity.Student;
+import com.project.edusync.uis.model.entity.StudentGuardianRelationship;
 import com.project.edusync.uis.model.entity.UserProfile;
+import com.project.edusync.uis.model.entity.Guardian;
 import com.project.edusync.uis.model.entity.details.LibrarianDetails;
 import com.project.edusync.uis.model.entity.details.PrincipalDetails;
 import com.project.edusync.uis.model.entity.details.StudentDemographics;
 import com.project.edusync.uis.model.entity.details.TeacherDetails;
 import com.project.edusync.uis.model.entity.medical.StudentMedicalRecord;
 import com.project.edusync.uis.model.dto.profile.ComprehensiveUserProfileResponseDTO;
+import com.project.edusync.uis.model.dto.profile.GuardianProfileDTO;
+import com.project.edusync.uis.model.dto.profile.LinkedStudentDTO;
+import com.project.edusync.uis.model.dto.profile.StudentGuardianDTO;
 import com.project.edusync.uis.repository.*;
 import com.project.edusync.uis.repository.details.LibrarianDetailsRepository;
 import com.project.edusync.uis.repository.details.PrincipalDetailsRepository;
@@ -39,7 +44,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -68,6 +75,8 @@ public class UserManagementServiceImpl implements UserManagementService {
     // --- Role Entities ---
     private final StaffRepository staffRepository;
     private final StudentRepository studentRepository;
+    private final GuardianRepository guardianRepository;
+    private final StudentGuardianRelationshipRepository studentGuardianRelationshipRepository;
 
     // --- Extension Repositories ---
     private final TeacherDetailsRepository teacherDetailsRepository;
@@ -84,6 +93,7 @@ public class UserManagementServiceImpl implements UserManagementService {
     private final TeacherMapper teacherMapper;
     private final PrincipalMapper principalMapper;
     private final LibrarianMapper librarianMapper;
+    private final GuardianMapper guardianMapper;
     private final ProfileService profileService;
 
     // =================================================================================
@@ -194,6 +204,128 @@ public class UserManagementServiceImpl implements UserManagementService {
         log.info("Success: Librarian created with ID: {}", staff.getId());
 
         return staff.getUserProfile().getUser();
+    }
+
+    @Override
+    @Transactional
+    public User createGuardian(UUID studentId, CreateGuardianRequestDTO request) {
+        log.info("Process started: Creating Guardian [{}] for Student UUID: {}", request.getUsername(), studentId);
+
+        Student student = studentRepository.findByUuid(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student", "uuid", studentId));
+
+        User user = createUserWithRole(request, "GUARDIAN");
+
+        UserProfile profile = userProfileRepository.findByUser(user)
+                .orElseThrow(() -> new EdusyncException("System Error: Profile creation verification failed.", HttpStatus.INTERNAL_SERVER_ERROR));
+
+        Guardian guardian = new Guardian();
+        guardian.setUserProfile(profile);
+        guardian.setPhoneNumber(request.getPhoneNumber());
+        guardian.setOccupation(request.getOccupation());
+        guardian.setEmployer(request.getEmployer());
+        guardian.setActive(true);
+        Guardian savedGuardian = guardianRepository.save(guardian);
+
+        StudentGuardianRelationship relation = new StudentGuardianRelationship();
+        relation.setStudent(student);
+        relation.setGuardian(savedGuardian);
+        relation.setRelationshipType(request.getRelationshipType());
+        relation.setPrimaryContact(request.isPrimaryContact());
+        relation.setCanPickup(request.isCanPickup());
+        relation.setFinancialContact(request.isFinancialContact());
+        relation.setCanViewGrades(request.isCanViewGrades());
+        studentGuardianRelationshipRepository.save(relation);
+
+        log.info("Success: Guardian created and linked. guardianUuid={}, studentUuid={}", savedGuardian.getUuid(), studentId);
+        return user;
+    }
+
+    @Override
+    @Transactional
+    public void linkExistingGuardian(UUID studentId, LinkGuardianRequestDTO request) {
+        log.info("Process started: Linking existing Guardian. studentUuid={}, guardianUuid={}", studentId, request.getGuardianId());
+
+        Student student = studentRepository.findByUuid(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student", "uuid", studentId));
+        Guardian guardian = guardianRepository.findByUuid(request.getGuardianId())
+                .orElseThrow(() -> new ResourceNotFoundException("Guardian", "uuid", request.getGuardianId()));
+
+        if (studentGuardianRelationshipRepository.existsByStudentAndGuardian(student, guardian)) {
+            throw new EdusyncException("Guardian is already linked to this student.", HttpStatus.CONFLICT);
+        }
+
+        StudentGuardianRelationship relation = new StudentGuardianRelationship();
+        relation.setStudent(student);
+        relation.setGuardian(guardian);
+        relation.setRelationshipType(request.getRelationshipType());
+        relation.setPrimaryContact(request.isPrimaryContact());
+        relation.setCanPickup(request.isCanPickup());
+        relation.setFinancialContact(request.isFinancialContact());
+        relation.setCanViewGrades(request.isCanViewGrades());
+        studentGuardianRelationshipRepository.save(relation);
+
+        log.info("Success: Existing guardian linked. studentUuid={}, guardianUuid={}", studentId, request.getGuardianId());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<StudentGuardianDTO> getGuardiansByStudent(UUID studentId) {
+        log.info("Process started: Fetching guardians for studentUuid={}", studentId);
+
+        Student student = studentRepository.findByUuid(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student", "uuid", studentId));
+
+        List<StudentGuardianDTO> response = new ArrayList<>();
+        List<StudentGuardianRelationship> relations = studentGuardianRelationshipRepository.findByStudent(student);
+        for (StudentGuardianRelationship relation : relations) {
+            Guardian guardian = relation.getGuardian();
+            if (guardian == null) {
+                continue;
+            }
+
+            StudentGuardianDTO dto = new StudentGuardianDTO();
+            dto.setGuardianUuid(guardian.getUuid());
+            UserProfile guardianProfile = guardian.getUserProfile();
+            if (guardianProfile != null) {
+                String firstName = guardianProfile.getFirstName() != null ? guardianProfile.getFirstName() : "";
+                String lastName = guardianProfile.getLastName() != null ? guardianProfile.getLastName() : "";
+                dto.setName((firstName + " " + lastName).trim());
+                dto.setProfileUrl(guardianProfile.getProfileUrl());
+                dto.setDateOfBirth(guardianProfile.getDateOfBirth());
+            }
+            dto.setRelation(relation.getRelationshipType());
+            dto.setPhoneNumber(guardian.getPhoneNumber());
+            dto.setOccupation(guardian.getOccupation());
+            dto.setEmployer(guardian.getEmployer());
+            dto.setPrimaryContact(relation.isPrimaryContact());
+            dto.setCanPickup(relation.isCanPickup());
+            dto.setFinancialContact(relation.isFinancialContact());
+            dto.setCanViewGrades(relation.isCanViewGrades());
+            dto.setActive(guardian.isActive());
+            response.add(dto);
+        }
+
+        log.info("Success: Guardians fetched for studentUuid={}, count={}", studentId, response.size());
+        return response;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<LinkedStudentDTO> getLinkedStudentsByGuardian(UUID guardianId) {
+        log.info("Process started: Fetching linked students for guardianUuid={}", guardianId);
+
+        Guardian guardian = guardianRepository.findByUuid(guardianId)
+                .orElseThrow(() -> new ResourceNotFoundException("Guardian", "uuid", guardianId));
+
+        List<StudentGuardianRelationship> relations = studentGuardianRelationshipRepository.findByGuardian(guardian);
+        List<LinkedStudentDTO> response = new ArrayList<>();
+        for (StudentGuardianRelationship relation : relations) {
+            response.add(guardianMapper.toLinkedStudentDto(relation));
+        }
+
+        log.info("Success: Linked students fetched for guardianUuid={}, count={}", guardianId, response.size());
+        return response;
     }
 
     // =================================================================================
@@ -430,6 +562,87 @@ public class UserManagementServiceImpl implements UserManagementService {
 
     @Override
     @Transactional
+    public User updateGuardian(UUID studentId, UUID guardianId, UpdateGuardianRequestDTO request) {
+        log.info("Process started: Updating Guardian. studentUuid={}, guardianUuid={}", studentId, guardianId);
+
+        Student student = studentRepository.findByUuid(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student", "uuid", studentId));
+
+        Guardian guardian = guardianRepository.findByUuid(guardianId)
+                .orElseThrow(() -> new ResourceNotFoundException("Guardian", "uuid", guardianId));
+
+        StudentGuardianRelationship relation = studentGuardianRelationshipRepository.findByStudentAndGuardian(student, guardian)
+                .orElseThrow(() -> new ResourceNotFoundException("StudentGuardianRelationship", "student+guardian", studentId + "+" + guardianId));
+
+        UserProfile profile = guardian.getUserProfile();
+        User user = profile.getUser();
+
+        if (StringUtils.hasText(request.getEmail()) && !request.getEmail().equalsIgnoreCase(user.getEmail())) {
+            if (userRepository.existsByEmail(request.getEmail())) {
+                throw new UserAlreadyExistsException("Email '" + request.getEmail() + "' already exists.");
+            }
+            user.setEmail(request.getEmail());
+        }
+
+        if (StringUtils.hasText(request.getFirstName())) {
+            profile.setFirstName(request.getFirstName());
+        }
+        if (request.getMiddleName() != null) {
+            profile.setMiddleName(request.getMiddleName());
+        }
+        if (StringUtils.hasText(request.getLastName())) {
+            profile.setLastName(request.getLastName());
+        }
+        if (request.getPreferredName() != null) {
+            profile.setPreferredName(request.getPreferredName());
+        }
+        if (request.getDateOfBirth() != null) {
+            profile.setDateOfBirth(request.getDateOfBirth());
+        }
+        if (request.getGender() != null) {
+            profile.setGender(request.getGender());
+        }
+        if (request.getBio() != null) {
+            profile.setBio(request.getBio());
+        }
+
+        if (StringUtils.hasText(request.getPhoneNumber())) {
+            guardian.setPhoneNumber(request.getPhoneNumber());
+        }
+        if (request.getOccupation() != null) {
+            guardian.setOccupation(request.getOccupation());
+        }
+        if (request.getEmployer() != null) {
+            guardian.setEmployer(request.getEmployer());
+        }
+
+        if (StringUtils.hasText(request.getRelationshipType())) {
+            relation.setRelationshipType(request.getRelationshipType());
+        }
+        if (request.getPrimaryContact() != null) {
+            relation.setPrimaryContact(request.getPrimaryContact());
+        }
+        if (request.getCanPickup() != null) {
+            relation.setCanPickup(request.getCanPickup());
+        }
+        if (request.getFinancialContact() != null) {
+            relation.setFinancialContact(request.getFinancialContact());
+        }
+        if (request.getCanViewGrades() != null) {
+            relation.setCanViewGrades(request.getCanViewGrades());
+        }
+
+        userRepository.save(user);
+        userProfileRepository.save(profile);
+        guardianRepository.save(guardian);
+        studentGuardianRelationshipRepository.save(relation);
+
+        log.info("Success: Guardian updated. studentUuid={}, guardianUuid={}", studentId, guardianId);
+        return user;
+    }
+
+    @Override
+    @Transactional
     public void softDeleteStudent(UUID studentId) {
         log.info("Process started: Soft deleting Student. UUID: {}", studentId);
 
@@ -437,7 +650,9 @@ public class UserManagementServiceImpl implements UserManagementService {
                 .orElseThrow(() -> new ResourceNotFoundException("Student", "uuid", studentId));
         User user = student.getUserProfile().getUser();
         user.setActive(false);
+        student.setActive(false);
         userRepository.save(user);
+        studentRepository.save(student);
         log.info("Student user deactivated successfully. studentUuid={}, userId={}", studentId, user.getId());
     }
 
@@ -450,8 +665,48 @@ public class UserManagementServiceImpl implements UserManagementService {
                 .orElseThrow(() -> new ResourceNotFoundException("Staff", "uuid", staffId));
         User user = staff.getUserProfile().getUser();
         user.setActive(false);
+        staff.setActive(false);
         userRepository.save(user);
+        staffRepository.save(staff);
         log.info("Staff user deactivated successfully. staffUuid={}, userId={}", staffId, user.getId());
+    }
+
+    @Override
+    @Transactional
+    public void softDeleteGuardian(UUID studentId, UUID guardianId) {
+        log.info("Process started: Soft deleting Guardian. studentUuid={}, guardianUuid={}", studentId, guardianId);
+
+        Student student = studentRepository.findByUuid(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student", "uuid", studentId));
+        Guardian guardian = guardianRepository.findByUuid(guardianId)
+                .orElseThrow(() -> new ResourceNotFoundException("Guardian", "uuid", guardianId));
+
+        studentGuardianRelationshipRepository.findByStudentAndGuardian(student, guardian)
+                .orElseThrow(() -> new ResourceNotFoundException("StudentGuardianRelationship", "student+guardian", studentId + "+" + guardianId));
+
+        User user = guardian.getUserProfile().getUser();
+        user.setActive(false);
+        guardian.setActive(false);
+        userRepository.save(user);
+        guardianRepository.save(guardian);
+        log.info("Guardian deactivated successfully. guardianUuid={}, userId={}", guardianId, user.getId());
+    }
+
+    @Override
+    @Transactional
+    public void unlinkGuardian(UUID studentId, UUID guardianId) {
+        log.info("Process started: Unlinking guardian. studentUuid={}, guardianUuid={}", studentId, guardianId);
+
+        Student student = studentRepository.findByUuid(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student", "uuid", studentId));
+        Guardian guardian = guardianRepository.findByUuid(guardianId)
+                .orElseThrow(() -> new ResourceNotFoundException("Guardian", "uuid", guardianId));
+
+        studentGuardianRelationshipRepository.findByStudentAndGuardian(student, guardian)
+                .orElseThrow(() -> new ResourceNotFoundException("StudentGuardianRelationship", "student+guardian", studentId + "+" + guardianId));
+
+        studentGuardianRelationshipRepository.deleteByStudentAndGuardian(student, guardian);
+        log.info("Success: Guardian unlinked from student. studentUuid={}, guardianUuid={}", studentId, guardianId);
     }
 
     @Override
@@ -464,7 +719,9 @@ public class UserManagementServiceImpl implements UserManagementService {
 
         User user = student.getUserProfile().getUser();
         user.setActive(active);
+        student.setActive(active);
         userRepository.save(user);
+        studentRepository.save(student);
 
         log.info("Success: Student user activation updated. studentUuid={}, userId={}, active={}",
                 studentId, user.getId(), active);
@@ -480,10 +737,36 @@ public class UserManagementServiceImpl implements UserManagementService {
 
         User user = staff.getUserProfile().getUser();
         user.setActive(active);
+        staff.setActive(active);
         userRepository.save(user);
+        staffRepository.save(staff);
 
         log.info("Success: Staff user activation updated. staffUuid={}, userId={}, active={}",
                 staffId, user.getId(), active);
+    }
+
+    @Override
+    @Transactional
+    public void setGuardianUserActivation(UUID studentId, UUID guardianId, boolean active) {
+        log.info("Process started: Setting Guardian activation. studentUuid={}, guardianUuid={}, active={}",
+                studentId, guardianId, active);
+
+        Student student = studentRepository.findByUuid(studentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Student", "uuid", studentId));
+        Guardian guardian = guardianRepository.findByUuid(guardianId)
+                .orElseThrow(() -> new ResourceNotFoundException("Guardian", "uuid", guardianId));
+
+        studentGuardianRelationshipRepository.findByStudentAndGuardian(student, guardian)
+                .orElseThrow(() -> new ResourceNotFoundException("StudentGuardianRelationship", "student+guardian", studentId + "+" + guardianId));
+
+        User user = guardian.getUserProfile().getUser();
+        user.setActive(active);
+        guardian.setActive(active);
+        userRepository.save(user);
+        guardianRepository.save(guardian);
+
+        log.info("Success: Guardian activation updated. guardianUuid={}, userId={}, active={}",
+                guardianId, user.getId(), active);
     }
 
     @Override
