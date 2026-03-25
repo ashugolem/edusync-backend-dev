@@ -101,8 +101,11 @@ public class WebSecurityConfig {
                                 .map(path -> apiVersionPath + path)
                                 .toArray(String[]::new)).permitAll()
 
-                        // 5. Default: All other requests must be authenticated
-//                        .anyRequest().authenticated()
+                        // 5. Framework/error paths that should stay public
+                        .requestMatchers(apiVersionPath + "/error", "/error", "/favicon.ico").permitAll()
+
+                        // 6. Default: all remaining endpoints require authentication
+                        .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(customAuthenticationEntryPoint))
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)

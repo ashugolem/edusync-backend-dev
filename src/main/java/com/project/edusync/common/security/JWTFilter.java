@@ -14,6 +14,7 @@ import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -27,6 +28,7 @@ public class JWTFilter extends OncePerRequestFilter {
 
     // 1. We ONLY need AuthUtil. We do not need UserRepository.
     private final AuthUtil authUtil;
+    private final CustomUserDetailService customUserDetailService;
 
     // We also do not need ObjectMapper. Error handling is
     // delegated to the JwtAuthenticationEntryPoint.
@@ -71,10 +73,11 @@ public class JWTFilter extends OncePerRequestFilter {
         // 3. Check if username & authorities were found and context is not set
         if (username != null && authorities != null && SecurityContextHolder.getContext().getAuthentication() == null) {
 
+            UserDetails userDetails = customUserDetailService.loadUserByUsername(username);
+
             // 4. Create the authentication token
-            // The 'principal' is now the username String, not a UserDetails object
             UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                    username,  // Principal (just the username)
+                    userDetails,
                     null,      // Credentials (N/A for JWT)
                     authorities // Authorities (from the token)
             );
