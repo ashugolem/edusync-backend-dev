@@ -18,10 +18,8 @@ public class CreateStudentRequestDTO extends CreateUserRequestDTO {
     // --- Core Enrollment Data ---
     private String enrollmentNumber;
 
-    // --- NEW FIELD ---
     @NotNull(message = "Roll Number is required")
     private Integer rollNo;
-    // ----------------
 
     @NotNull(message = "Section ID is required for enrollment")
     private UUID sectionId;
