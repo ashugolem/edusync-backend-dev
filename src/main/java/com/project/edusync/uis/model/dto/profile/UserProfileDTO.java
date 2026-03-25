@@ -15,6 +15,7 @@ public class UserProfileDTO {
     private String middleName;
     private String lastName;
     private String preferredName;
+    private String profileUrl;
     private LocalDate dateOfBirth;
     private String bio;
     private Gender gender;

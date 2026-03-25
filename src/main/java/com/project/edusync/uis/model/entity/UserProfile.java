@@ -33,6 +33,9 @@ public class UserProfile extends AuditableEntity {
     @Column(name = "preferred_name", length = 50)
     private String preferredName;
 
+    @Column(name = "profile_url", length = 1024)
+    private String profileUrl;
+
     @Column(name = "date_of_birth")
     private LocalDate dateOfBirth;
 

@@ -33,6 +33,7 @@ public class StudentSummaryDTO {
     private String lastName;
     private String email;
     private String username;
+    private String profileUrl;
     private LocalDate dateOfBirth;
     private String gender;
 

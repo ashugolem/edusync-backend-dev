@@ -41,6 +41,7 @@ public interface UserProfileMapper {
      */
     @Mapping(source = "profile.id", target = "id")
     @Mapping(source = "profile.uuid", target = "uuid")
+    @Mapping(source = "profile.profileUrl", target = "profileUrl")
     @Mapping(source = "user.username", target = "username")
     @Mapping(source = "user.email", target = "email")
     @Mapping(source = "profile.createdAt", target = "createdAt")
@@ -52,6 +53,7 @@ public interface UserProfileMapper {
      * Simplified DTO mapping often used for basic return values after updates.
      */
     @Mapping(source = "profile.id", target = "profileId")
+    @Mapping(source = "profile.profileUrl", target = "profileUrl")
     @Mapping(source = "user.username", target = "username")
     @Mapping(source = "user.email", target = "email")
     UserProfileDTO toDto(UserProfile profile, User user);

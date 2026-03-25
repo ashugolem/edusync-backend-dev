@@ -36,6 +36,7 @@ public interface StaffMapper {
     @Mapping(source = "id", target = "staffId")
     // We assume the UUID (external ID) acts as the system ID.
     @Mapping(source = "uuid", target = "staffSystemId")
+    @Mapping(source = "userProfile.profileUrl", target = "profileUrl")
     // 'jobTitle' and 'staffType' map automatically by name
     StaffProfileDTO toDto(Staff staff);
 

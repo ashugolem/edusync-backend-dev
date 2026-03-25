@@ -30,6 +30,7 @@ public interface StudentMapper {
      */
     @Mapping(source = "id", target = "studentId")
     @Mapping(source = "enrollmentNumber", target = "enrollmentNo")
+    @Mapping(source = "userProfile.profileUrl", target = "profileUrl")
     // Converts the boolean 'isActive' flag to a readable String for the frontend
     @Mapping(target = "enrollmentStatus", expression = "java(student.isActive() ? \"ACTIVE\" : \"INACTIVE\")")
     // Medical record is a complex nested object; we ignore it here to keep the fetch lightweight

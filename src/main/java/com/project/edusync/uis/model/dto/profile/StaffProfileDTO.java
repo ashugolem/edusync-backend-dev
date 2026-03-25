@@ -17,6 +17,7 @@ public class StaffProfileDTO {
     // --- Identity ---
     private Long staffId;
     private String staffSystemId; // Maps to Staff.uuid
+    private String profileUrl;
 
     // --- Professional Info ---
     private String jobTitle;
